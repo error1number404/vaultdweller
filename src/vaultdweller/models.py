@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator, AliasChoices, Field
 
+import pyotp
 from .crypto import decrypt
 
 
@@ -116,16 +117,16 @@ class CustomFieldType(IntEnum):
 class Collection(PermissiveBaseModel):
     ExternalId: Optional[UUID]
     HidePasswords: bool
-    Id: UUID
+    Id: Optional[UUID]
     Name: str
     Object: str
-    OrganizationId: UUID
+    OrganizationId: Optional[UUID]
     ReadOnly: bool
 
 
 class CipherPasswordHistory(PermissiveBaseModel):
     LastUsedDate: datetime
-    Password: str
+    Password: Optional[str]
 
 
 class CustomField(PermissiveBaseModel):
@@ -140,23 +141,23 @@ class CipherData(PermissiveBaseModel):
     Fields: Optional[list[CustomField]]
     Name: str
     Notes: Optional[str]
-    Password: str
+    Password: Optional[str]
     PasswordHistory: Optional[list[CipherPasswordHistory]]
     PasswordRevisionDate: Optional[datetime]
     Totp: Optional[str]
     Uri: Optional[str]
     Uris: Optional[list]
-    Username: str
+    Username: Optional[str]
 
 
 class CipherLogin(PermissiveBaseModel):
     AutofillOnPageLoad: Optional[str]
-    Password: str
+    Password: Optional[str]
     PasswordRevisionDate: Optional[datetime]
     Totp: Optional[str]
     Uri: Optional[str]
     Uris: Optional[list]
-    Username: str
+    Username: Optional[str]
 
 
 class Cipher(PermissiveBaseModel):
@@ -177,7 +178,7 @@ class Cipher(PermissiveBaseModel):
     Name: str
     Notes: Optional[str]
     Object: str
-    OrganizationId: UUID
+    OrganizationId: Optional[UUID]
     OrganizationUseTotp: bool
     PasswordHistory: Optional[list[CipherPasswordHistory]]
     Reprompt: int
@@ -202,5 +203,11 @@ class Creds(BaseModel):
     username: str
     password: str
     topt: Optional[str]
+    totp_secret: Optional[str] = None
     uri: Optional[str]
     custom_fields: Optional[list[CustomField]]
+
+    def get_current_totp(self) -> Optional[str]:
+        if not self.totp_secret:
+            return None
+        return pyotp.TOTP(self.totp_secret).now()

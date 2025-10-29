@@ -67,9 +67,10 @@ class VaultWarden:
             uri = decrypt_text(item.Login.Uri, org_key)
 
         topt = None
+        totp_secret = None
         if item.Login.Totp:
-            topt_key = decrypt_text(item.Login.Totp, org_key)
-            totp = pyotp.TOTP(topt_key)
+            totp_secret = decrypt_text(item.Login.Totp, org_key)
+            totp = pyotp.TOTP(totp_secret)
             topt = totp.now()
 
         custom_fields = None
@@ -91,6 +92,7 @@ class VaultWarden:
             username=username,
             password=password,
             topt=topt,
+            totp_secret=totp_secret,
             uri=uri,
             custom_fields=custom_fields
         )
@@ -143,6 +145,29 @@ class VaultWarden:
                 return self._extract_creds(item)
 
         raise VaultItemNotFound(f'Item with id={item_id} not found')
+    
+    async def get_totp_by_id(self, item_id: Union[str, UUID]) -> Optional[str]:
+        """
+        Return the current TOTP code for the given credential ID without forcing a resync.
+        Assumes an initial sync has occurred to have keys and ciphers; loads once if needed.
+        """
+        if self._sync_data is None:
+            await self.sync_vault(False)
+
+        if isinstance(item_id, str):
+            item_id = UUID(item_id)
+
+        for item in self._sync_data.Ciphers:
+            if item.Id == item_id:
+                org_key = self._org_keys.get(item.OrganizationId)
+                if not item.Login or not item.Login.Totp:
+                    return None
+                secret = decrypt_text(item.Login.Totp, org_key)
+                totp = pyotp.TOTP(secret)
+                return totp.now()
+        return None
+
+    
 
     def creds_by_name_sync(
             self,
