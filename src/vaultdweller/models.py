@@ -4,10 +4,29 @@ from enum import IntEnum
 from typing import Optional
 from uuid import UUID
 
+import pyotp
 from pydantic import BaseModel, field_validator, AliasChoices, Field
 
-import pyotp
 from .crypto import decrypt
+
+
+def _datetime_parser(value):
+    if isinstance(value, str):
+        # 2025-12-17T13:02:50.840000+00:00Z
+        if value.endswith('Z') and '+' in value:
+            # 2025-12-17T13:02:50.840000+00:00Z
+            value = value.replace('Z', '')  # Убираем Z
+        try:
+            return datetime.fromisoformat(value.replace('Z', ''))
+        except ValueError:
+            try:
+                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+            except ValueError:
+                try:
+                    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+                except ValueError:
+                    raise ValueError(f"Can't pase datetime: {value}")
+    return value
 
 
 class VaultwardenUserStatus(IntEnum):
@@ -125,8 +144,14 @@ class Collection(PermissiveBaseModel):
 
 
 class CipherPasswordHistory(PermissiveBaseModel):
-    LastUsedDate: datetime
+    LastUsedDate: Optional[datetime]
     Password: Optional[str]
+
+    @field_validator('LastUsedDate', mode='before')
+    @classmethod
+    def parse_datetime(cls, value):
+        _datetime_parser(value)
+        return value
 
 
 class CustomField(PermissiveBaseModel):
@@ -149,6 +174,12 @@ class CipherData(PermissiveBaseModel):
     Uris: Optional[list]
     Username: Optional[str]
 
+    @field_validator('PasswordRevisionDate', mode='before')
+    @classmethod
+    def parse_datetime(cls, value):
+        _datetime_parser(value)
+        return value
+
 
 class CipherLogin(PermissiveBaseModel):
     AutofillOnPageLoad: Optional[str]
@@ -158,6 +189,12 @@ class CipherLogin(PermissiveBaseModel):
     Uri: Optional[str]
     Uris: Optional[list]
     Username: Optional[str]
+
+    @field_validator('PasswordRevisionDate', mode='before')
+    @classmethod
+    def parse_datetime(cls, value):
+        _datetime_parser(value)
+        return value
 
 
 class Cipher(PermissiveBaseModel):
@@ -187,6 +224,52 @@ class Cipher(PermissiveBaseModel):
     Type: int
     ViewPassword: bool
 
+    def to_export_format(self) -> dict:
+        """
+        Hydrate the Cipher for the put request
+        """
+
+        login_source = self.Login or self.Data
+        fields_source = self.Data.Fields if self.Data.Fields else self.Fields or []
+        history_source = self.PasswordHistory if self.PasswordHistory else self.Data.PasswordHistory or []
+
+        return {
+            "Type": self.Type,
+            "FolderId": str(self.FolderId) if self.FolderId else None,
+            "OrganizationId": str(self.OrganizationId) if self.OrganizationId else None,
+            "Name": self.Name,
+            "Notes": self.Notes,
+            "Favorite": self.Favorite,
+            "LastKnownRevisionDate": str(self.RevisionDate),
+            "Reprompt": self.Reprompt,
+            "Login": {
+                "Response": None,
+                "Uris": login_source.Uris,
+                "Username": login_source.Username,
+                "Password": login_source.Password,
+                "PasswordRevisionDate": str(login_source.PasswordRevisionDate),
+                "Totp": login_source.Totp,
+                "AutofillOnPageLoad": login_source.AutofillOnPageLoad,
+            },
+            "Fields": [
+                {
+                    "Response": None,
+                    "Type": field.Type,
+                    "Name": field.Name,
+                    "Value": field.Value,
+                    "LinkedId": field.LinkedId,
+                }
+                for field in fields_source
+            ],
+            "PasswordHistory": [
+                {
+                    "LastUsedDate": str(item.LastUsedDate),
+                    "Password": item.Password,
+                }
+                for item in history_source
+            ]
+        }
+
 
 class SyncData(PermissiveBaseModel):
     Ciphers: list[Cipher]
@@ -200,6 +283,7 @@ class SyncData(PermissiveBaseModel):
 
 
 class Creds(BaseModel):
+    item_id: str
     username: str
     password: str
     topt: Optional[str]

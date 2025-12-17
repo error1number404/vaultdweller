@@ -11,6 +11,7 @@ from .models import ConnectToken, SyncData
 class VaultWardenClient:
     TOKEN_PATH = 'identity/connect/token'
     SYNC_PATH = 'api/sync'
+    CIPHER_PATH = 'api/ciphers/'
 
     def __init__(
             self,
@@ -140,3 +141,9 @@ class VaultWardenClient:
             resp = await self._api_request("GET", self.SYNC_PATH)
             self._sync = SyncData.model_validate_json(resp.text)
         return self._sync
+
+    async def cipher_vault(self, item_id, put_json):
+        """
+        Put edited item
+        """
+        await self._api_request('PUT', self.CIPHER_PATH + str(item_id), json=put_json)

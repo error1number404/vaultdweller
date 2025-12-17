@@ -8,7 +8,7 @@ def readme():
 
 setup(
     name='vaultdweller',
-    version='0.2.0',
+    version='0.2.1',
     author='ckoetael',
     author_email='ckoetael@gmail.com',
     description='This is the simplest client for quick work with vaultwarden.',

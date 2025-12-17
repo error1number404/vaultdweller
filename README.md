@@ -30,6 +30,12 @@ by_id_async = await vault.get_creds_by_id('ea27e9e3-f4c0-45ca-afd3-f7e722303a4b'
 by_name_async = await vault.creds_by_name('item_name_1')
 by_name_sync = vault.creds_by_name_sync('item_name_2', collection='Collection_1')
 
+# change password
+await vault.change_password(by_name_async.item_id, 'new_password')
+
+#generate new totp
+by_name_async.get_current_totp()
+
 ```
 ### Results
 ```

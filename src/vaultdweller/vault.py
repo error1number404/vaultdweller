@@ -1,11 +1,12 @@
 import asyncio
+import datetime
 from typing import Optional, Union
 from uuid import UUID
 
 import pyotp
 
 from .client import VaultWardenClient
-from .crypto import decrypt, decrypt_text
+from .crypto import decrypt, decrypt_text, encrypt
 from .exceptions import VaultItemNotFound
 from .models import SyncData, Creds, Cipher, CustomField
 
@@ -89,6 +90,7 @@ class VaultWarden:
                     )
                 )
         return Creds(
+            item_id=str(item.Id),
             username=username,
             password=password,
             topt=topt,
@@ -145,7 +147,7 @@ class VaultWarden:
                 return self._extract_creds(item)
 
         raise VaultItemNotFound(f'Item with id={item_id} not found')
-    
+
     async def get_totp_by_id(self, item_id: Union[str, UUID]) -> Optional[str]:
         """
         Return the current TOTP code for the given credential ID without forcing a resync.
@@ -167,7 +169,33 @@ class VaultWarden:
                 return totp.now()
         return None
 
-    
+    async def change_password(self, item_id: Union[str, UUID], new_password: str):
+        """
+        Change password in item
+        """
+        if isinstance(item_id, str):
+            item_id = UUID(item_id)
+
+        for elm in self._sync_data.Ciphers:
+            if elm.Id == item_id:
+                item = elm
+                break
+        else:
+            raise VaultItemNotFound(f'Item with id={item_id} not found')
+
+        put_json = self._prepare_put_body(item.OrganizationId, item.to_export_format(), new_password)
+
+        await self._client.cipher_vault(item_id, put_json)
+
+        await self.sync_vault(True)
+
+    def _prepare_put_body(self, org_id: UUID, item: dict, new_password) -> dict:
+        org_key = self._org_keys.get(org_id)
+
+        item['Login']['Password'] = encrypt(2, new_password, org_key)
+        item['Login']['PasswordRevisionDate'] = str(datetime.datetime.now())
+
+        return item
 
     def creds_by_name_sync(
             self,
