@@ -30,7 +30,7 @@ class VaultWarden:
         """
         Sync with vault
         """
-        if self._sync_data is None:
+        if self._sync_data is None or force_refresh:
             self._sync_data: SyncData = await self._client.sync_vault(force_refresh)
             for org in self._sync_data.Profile.Organizations:
                 self._org_keys[org.Id] = decrypt(org.Key, self._client.connect_token.orgs_key)
